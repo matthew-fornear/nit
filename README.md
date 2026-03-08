@@ -50,10 +50,13 @@ python main.py --no-session
 
 Per run, two files under `output/<hostname>/`:
 
-- **networkcalls.json** – All captured requests/responses: `captured_at`, `url`, `total_entries`, `entries[]` (`url`, `method`, `request_headers`, `request_post_data`, `response` with `status`, `status_text`, `response_headers`, `body`).
-- **scripts.json** – Same structure but only entries whose response is JavaScript (content-type or `.js` URL); includes `total_scripts`.
+- **networkcalls.json** – All captured requests/responses: `captured_at`, `total_entries`, `entries[]` (`url`, `method`, `request_headers`, `request_post_data`, `response` with `status`, `status_text`, `response_headers`, `body`).
+- **scripts.json** – All scripts in one list; each entry has **`script_type`**: `"network"` | `"inline"` | `"dynamic"`.
+  - **network**: same shape as networkcalls entries (url, method, request_headers, request_post_data, response with body); only JS responses.
+  - **inline**: `url` (page URL), `body` (script source).
+  - **dynamic**: `scriptId`, `url` (empty), `body` (source from eval/new Function via CDP).
 
-Bodies are captured for: `application/json`, `application/javascript`, `text/javascript`, URLs containing `graphql` or `/api/`, and `.js` requests. Full body per response; no truncation. 
+Includes `total_scripts`, `total_network`, `total_inline`, `total_dynamic`. Full body per script; no truncation. 
 
 ## Session
 

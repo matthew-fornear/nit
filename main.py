@@ -71,7 +71,14 @@ def _launch_browser(p):
     raise RuntimeError("No usable browser. Run: patchright install chrome")
 
 
+def _is_entry_page(url: str) -> bool:
+    """Exclude the local entry.html from network capture."""
+    return "entry.html" in (url or "")
+
+
 def should_capture(url: str, domains: list[str] | None) -> bool:
+    if _is_entry_page(url):
+        return False
     if not domains:
         return True
     try:
@@ -117,6 +124,9 @@ def main(
 ):
     entries = []
     index_by_request = {}
+    dynamic_scripts: list[dict] = []  # eval / new Function code (unused when using CDP)
+    inline_scripts: list[dict] = []   # { "url": str, "code": str } per inline block
+    cdp_parsed_scripts: list[dict] = []  # CDP Debugger.scriptParsed: scriptId, url, source
     load_state = not no_session and state_file.exists()
 
     def on_request(request):
@@ -166,6 +176,24 @@ def main(
         page.on("request", on_request)
         page.on("response", on_response)
 
+        # CDP: capture all parsed scripts (inline, eval, new Function, network)
+        cdp_script_ids: list[dict] = []  # {scriptId, url} from scriptParsed; sources filled later
+
+        try:
+            cdp = context.new_cdp_session(page)
+            cdp.send("Debugger.enable")
+
+            def on_script_parsed(params):
+                script_id = params.get("scriptId") or ""
+                url = params.get("url") or ""
+                if script_id:
+                    cdp_script_ids.append({"scriptId": script_id, "url": url})
+
+            cdp.on("Debugger.scriptParsed", on_script_parsed)
+        except Exception as e:
+            print("Warning: CDP session failed, dynamic script capture disabled:", e, file=sys.stderr)
+            cdp = None
+
         entry_html = SCRIPT_DIR / "entry.html"
         if entry_html.exists():
             page.goto(entry_html.as_uri(), wait_until="domcontentloaded", timeout=10000)
@@ -173,6 +201,48 @@ def main(
             page.goto("about:blank", wait_until="domcontentloaded", timeout=10000)
 
         input("Press Enter to save capture and session, then close... ")
+
+        # Fetch CDP script sources (deferred to avoid calling send() from inside event callback)
+        if cdp is not None and cdp_script_ids:
+            try:
+                for item in cdp_script_ids:
+                    try:
+                        result = cdp.send("Debugger.getScriptSource", {"scriptId": item["scriptId"]})
+                        source = result.get("scriptSource", "")
+                    except Exception:
+                        source = ""
+                    cdp_parsed_scripts.append({
+                        "scriptId": item["scriptId"],
+                        "url": item["url"],
+                        "source": source,
+                    })
+            except Exception as e:
+                print("Warning: CDP getScriptSource failed:", e, file=sys.stderr)
+            try:
+                cdp.send("Debugger.disable")
+                cdp.detach()
+            except Exception:
+                pass
+
+        # Read inline scripts from DOM at save time (redundant with CDP but kept for compatibility)
+        try:
+            captured = page.evaluate("""
+                (function() {
+                    var inlineEls = Array.from(document.querySelectorAll('script:not([src])'));
+                    var inline = inlineEls
+                        .map(function(s) { return s.textContent || ''; })
+                        .filter(function(c) { return c.trim().length > 0; });
+                    return { url: location.href, inline: inline };
+                })()
+            """)
+            if captured and isinstance(captured, dict):
+                page_url = captured.get("url") or ""
+                for code in captured.get("inline") or []:
+                    if code.strip():
+                        inline_scripts.append({"url": page_url, "code": code})
+        except Exception:
+            pass
+
         time.sleep(2)
         try:
             context.storage_state(path=str(state_file))
@@ -207,19 +277,45 @@ def main(
     if out_dir is None:
         out_dir = _output_dir_from_entries(entry_list)
     out_dir.mkdir(parents=True, exist_ok=True)
-    script_entries = [e for e in entry_list if _is_script_entry(e)]
+
+    # Single scripts.json: network + inline + dynamic, each with script_type
+    script_entries_network = [e for e in entry_list if _is_script_entry(e)]
+    combined = []
+    for e in script_entries_network:
+        combined.append({"script_type": "network", **e})
+    for e in inline_scripts:
+        combined.append({
+            "script_type": "inline",
+            "url": e.get("url", ""),
+            "body": e.get("code", ""),
+        })
+    for e in cdp_parsed_scripts:
+        if (e.get("url") or "").strip() == "":
+            combined.append({
+                "script_type": "dynamic",
+                "scriptId": e.get("scriptId", ""),
+                "url": e.get("url", ""),
+                "body": e.get("source", ""),
+            })
 
     networkcalls_path = out_dir / "networkcalls.json"
     scripts_path = out_dir / "scripts.json"
     networkcalls_path.write_text(
         json.dumps({**meta, "entries": entry_list}, indent=2), encoding="utf-8"
     )
+    scripts_meta = {
+        **meta,
+        "total_scripts": len(combined),
+        "total_network": len(script_entries_network),
+        "total_inline": len(inline_scripts),
+        "total_dynamic": sum(1 for e in cdp_parsed_scripts if (e.get("url") or "").strip() == ""),
+    }
     scripts_path.write_text(
-        json.dumps({**meta, "total_scripts": len(script_entries), "entries": script_entries}, indent=2),
+        json.dumps({**scripts_meta, "entries": combined}, indent=2),
         encoding="utf-8",
     )
     print("Saved", len(entry_list), "requests to", networkcalls_path)
-    print("Saved", len(script_entries), "scripts to", scripts_path)
+    print("Saved", len(combined), "scripts (network/inline/dynamic) to", scripts_path)
 
 
 if __name__ == "__main__":
