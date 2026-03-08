@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Network &amp; script inspection tool – instructions</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      line-height: 1.6;
+      max-width: 42rem;
+      margin: 2rem auto;
+      padding: 0 1rem;
+      color: #1a1a1a;
+    }
+    h1 { font-size: 1.25rem; margin-bottom: 1rem; }
+    ol { padding-left: 1.5rem; }
+    li { margin-bottom: 0.5rem; }
+    code { background: #eee; padding: 0.15em 0.4em; border-radius: 3px; font-size: 0.9em; }
+    .note { margin-top: 1.5rem; padding: 0.75rem; background: #f5f5f5; border-radius: 4px; font-size: 0.9em; }
+  </style>
+</head>
+<body>
+  <h1>Network &amp; script inspection tool</h1>
+  <ol>
+    <li><strong>Navigate</strong> to the site you want to capture (type the URL in the address bar or use a bookmark).</li>
+    <li>Use the site as usual (log in, click around, load the pages you care about). All requests and script responses are recorded.</li>
+    <li>When finished, <strong>switch to the terminal</strong> and press <strong>Enter</strong> to save and close.</li>
+  </ol>
+  <p><strong>Output</strong> is written under <code>output/&lt;hostname&gt;/</code>:</p>
+  <ul>
+    <li><code>networkcalls.json</code> – all requests and responses</li>
+    <li><code>scripts.json</code> – JavaScript responses only</li>
+  </ul>
+  <p><strong>Session</strong> is saved to <code>session.json</code> so the next run can reuse cookies/storage. Use <code>--no-session</code> to start fresh.</p>
+  <div class="note">To force output to a specific hostname, run with <code>--url https://example.com</code>. To limit which hosts are captured, use <code>--domains example.com,api.example.com</code>.</div>
+</body>
+</html>
