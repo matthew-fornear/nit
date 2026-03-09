@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import argparse
 import json
-import platform
 import re
 import sys
 import time
@@ -44,26 +43,21 @@ def _output_dir_from_entries(entry_list: list) -> Path:
     return OUTPUT_DIR / name
 
 
-def _user_agent() -> str:
-    if platform.system() == "Linux":
-        return (
-            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-            "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        )
-    return (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    )
-
-
 def _launch_browser(p):
+    # Prefer real Chrome/Edge so UA and fingerprint match the binary; avoid automation flags.
     for channel in ("chrome", "msedge", None):
         try:
             b = p.chromium.launch(
                 channel=channel,
                 headless=False,
                 args=["--disable-blink-features=AutomationControlled"],
-                ignore_default_args=["--enable-automation"],
+                ignore_default_args=[
+                    "--enable-automation",
+                    "--disable-extensions",
+                    "--disable-component-update",
+                    "--disable-default-apps",
+                    "--disable-popup-blocking",
+                ],
             )
             return b
         except Exception:
@@ -128,6 +122,7 @@ def main(
     inline_scripts: list[dict] = []   # { "url": str, "code": str } per inline block
     cdp_parsed_scripts: list[dict] = []  # CDP Debugger.scriptParsed: scriptId, url, source
     load_state = not no_session and state_file.exists()
+    final_page_url: str | None = None  # set after user presses Enter; used for output dir
 
     def on_request(request):
         if not should_capture(request.url, domains):
@@ -164,10 +159,11 @@ def main(
 
     with sync_playwright() as p:
         browser = _launch_browser(p)
+        # Don't override user_agent: real browser UA matches the binary and avoids Turnstile/detection.
         context_opts = dict(
             no_viewport=True,
-            user_agent=_user_agent(),
             ignore_https_errors=True,
+            locale="en-US",
         )
         if load_state:
             context_opts["storage_state"] = str(state_file)
@@ -201,6 +197,7 @@ def main(
             page.goto("about:blank", wait_until="domcontentloaded", timeout=10000)
 
         input("Press Enter to save capture and session, then close... ")
+        final_page_url = page.url or None
 
         # Fetch CDP script sources (deferred to avoid calling send() from inside event callback)
         if cdp is not None and cdp_script_ids:
@@ -275,7 +272,20 @@ def main(
         for e in entries if e.get("request")
     ]
     if out_dir is None:
-        out_dir = _output_dir_from_entries(entry_list)
+        # Prefer the page the user was on (e.g. underdogsportsbook.com) over the most-requested
+        # host (e.g. fonts.gstatic.com from third-party resources).
+        page_host = None
+        if final_page_url and not _is_entry_page(final_page_url):
+            try:
+                h = urlparse(final_page_url).hostname
+                if h and h not in ("localhost", "127.0.0.1"):
+                    page_host = h
+            except Exception:
+                pass
+        if page_host:
+            out_dir = OUTPUT_DIR / _safe_host(page_host)
+        else:
+            out_dir = _output_dir_from_entries(entry_list)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # Single scripts.json: network + inline + dynamic, each with script_type
