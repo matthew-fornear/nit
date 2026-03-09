@@ -127,11 +127,15 @@ def main(
     def on_request(request):
         if not should_capture(request.url, domains):
             return
+        try:
+            post_data = request.post_data
+        except (UnicodeDecodeError, Exception):
+            post_data = None  # binary body (e.g. gzip); Patchright decodes as utf-8
         req = {
             "url": request.url,
             "method": request.method,
             "headers": dict(request.headers) if request.headers else {},
-            "post_data": request.post_data,
+            "post_data": post_data,
         }
         idx = len(entries)
         entries.append({"request": req, "response": None})
