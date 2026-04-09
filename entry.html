@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Network &amp; script inspection tool – instructions</title>
+  <title>Network &amp; script inspection tool &ndash; instructions</title>
   <style>
     body {
       font-family: system-ui, sans-serif;
@@ -23,16 +23,25 @@
 <body>
   <h1>Network &amp; script inspection tool</h1>
   <ol>
-    <li><strong>Navigate</strong> to the site you want to capture (type the URL in the address bar or use a bookmark).</li>
+    <li>Open the target site in <strong>this</strong> browser (same window). You may use a <strong>new tab</strong> (Ctrl+T) for the site; capture and the output folder name use the <strong>last</strong> tab with a normal <code>https://</code> URL.</li>
     <li>Use the site as usual (log in, click around, load the pages you care about). All requests and script responses are recorded.</li>
     <li>When finished, <strong>switch to the terminal</strong> and press <strong>Enter</strong> to save and close.</li>
   </ol>
   <p><strong>Output</strong> is written under <code>output/&lt;hostname&gt;/</code>:</p>
   <ul>
-    <li><code>networkcalls.json</code> – all requests and responses</li>
-    <li><code>scripts.json</code> – JavaScript responses only</li>
+    <li><code>networkcalls.json</code> &ndash; all requests and responses</li>
+    <li><code>scripts.json</code> &ndash; JavaScript responses only</li>
   </ul>
   <p><strong>Session</strong> is saved to <code>session.json</code> so the next run can reuse cookies/storage. Use <code>--no-session</code> to start fresh.</p>
-  <div class="note">To force output to a specific hostname, run with <code>--url https://example.com</code>. To limit which hosts are captured, use <code>--domains example.com,api.example.com</code>.</div>
+  <div class="note">
+    <strong>Getting reCAPTCHA / &ldquo;noCAPTCHA&rdquo; errors on LinkedIn or Google?</strong>
+    Use a persistent Chrome profile so the site sees a real browser with history and a stable fingerprint.
+    Copy your profile once, then pass it on every run:<br><br>
+    <code>cp -r ~/.config/google-chrome ./chrome-profile</code><br>
+    <code>python main.py --user-data-dir chrome-profile</code><br><br>
+    Other options: <code>--url https://example.com</code> forces output hostname &nbsp;&middot;&nbsp;
+    <code>--domains example.com,api.example.com</code> limits capture &nbsp;&middot;&nbsp;
+    <code>--cdp-debugger</code> dumps eval&rsquo;d scripts (slow).
+  </div>
 </body>
 </html>

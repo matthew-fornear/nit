@@ -1,4 +1,5 @@
 session.json
+chrome-profile/
 output/
 *.pyc
 __pycache__/

@@ -26,6 +26,7 @@ Browser opens on `entry.html` (instructions). Navigate to the site you want to c
 | `--session-file` | `session.json` | Session state path |
 | `--domains` | (all) | Comma-separated hosts to capture; omit = capture all |
 | `--no-session` | — | Do not load or save session |
+| `--user-data-dir` | (none) | Path to a persistent Chrome profile directory (see below) |
 
 **Examples**
 
@@ -44,7 +45,27 @@ python main.py --domains example.com,api.example.com
 
 # Fresh run, no saved session
 python main.py --no-session
+
+# Use a persistent Chrome profile (best for reCAPTCHA / anti-bot sites)
+python main.py --user-data-dir chrome-profile
 ```
+
+## Bypassing reCAPTCHA / anti-bot detection (LinkedIn, Google, etc.)
+
+Sites that use reCAPTCHA Enterprise (LinkedIn, Google sign-up, etc.) fingerprint the browser before deciding whether to issue a valid token. In a fresh managed context they detect automation and silently skip the token — resulting in "noCAPTCHA user response code is missing or invalid".
+
+**Fix: use a persistent Chrome profile** with `--user-data-dir`. This runs Chrome with a real on-disk profile that has browsing history, stored credentials, and a stable hardware fingerprint — exactly what reCAPTCHA scores as human.
+
+```bash
+# One-time setup: copy your real Chrome profile to a non-default path
+# (Chrome's DevTools debugging rejects the default directory)
+cp -r ~/.config/google-chrome ./chrome-profile
+
+# Every subsequent run uses that profile (path is relative to this repo)
+python main.py --user-data-dir chrome-profile
+```
+
+Session state (cookies, localStorage) lives in the profile directory; `session.json` is not used in this mode.
 
 ## Output
 
